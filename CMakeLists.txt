@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.24)
 project(CUDA_Project LANGUAGES CUDA CXX)
 
 # ===== standarts =====
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CUDA_STANDARD 14)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CUDA_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
@@ -16,7 +16,7 @@ set(CMAKE_CUDA_ARCHITECTURES native)
         ${CMAKE_CURRENT_SOURCE_DIR}/*.cu
     )
 # ===== executable =====
-    add_executable(run ${CUDA_SOURCES} "pinned_buffer.h" "mapped_file.h")
+    add_executable(run ${CUDA_SOURCES})
 # ===== includes =====
     target_include_directories(run PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
