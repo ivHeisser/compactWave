@@ -1,9 +1,26 @@
 #include <iostream>
+/*
 #include <sys/mman.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+*/
+#include <filesystem>
+#include <fstream>
+#include <vector>
+
+namespace fs = std::filesystem;
+
+std::vector<char> readFile(const fs::path& path) {
+	std::ifstream file(path, std::ios::binary | std::ios::ate);
+	auto size = file.tellg();
+	file.seekg(0);
+
+	std::vector<char> buffer(size);
+	file.read(buffer.data(), size);
+	return buffer;
+}
 #include "structs.cuh"
 
 __global__ void fill(const int ix, Tile* buf);

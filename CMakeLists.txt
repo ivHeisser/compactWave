@@ -1,23 +1,22 @@
-if(TRUE)
-    cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.24)
 
-    project(CUDA_Project LANGUAGES CUDA CXX)
+project(CUDA_Project LANGUAGES CUDA CXX)
 
 # ===== standarts =====
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CUDA_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-# ===== CUDA arch (RTX 30xx = 86) =====
-set(CMAKE_CUDA_ARCHITECTURES 86)
+# ===== CUDA arch  =====
+set(CMAKE_CUDA_ARCHITECTURES native)
 
 # all CUDA files in root dir
     file(GLOB CUDA_SOURCES CONFIGURE_DEPENDS
         ${CMAKE_CURRENT_SOURCE_DIR}/*.cu
     )
 # ===== executable =====
-    add_executable(run ${CUDA_SOURCES})
+    add_executable(run ${CUDA_SOURCES} "pinned_buffer.h")
 # ===== includes =====
     target_include_directories(run PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -33,11 +32,10 @@ target_compile_options(run PRIVATE
         $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:--use_fast_math>
     >
 )
-endif()
 
 
 if(FALSE)
-    cmake_minimum_required(VERSION 3.18)
+    cmake_minimum_required(VERSION 3.24)
 
     project(CUDA_Project LANGUAGES CXX CUDA)
 
