@@ -16,7 +16,7 @@ set(CMAKE_CUDA_ARCHITECTURES native)
         ${CMAKE_CURRENT_SOURCE_DIR}/*.cu
     )
 # ===== executable =====
-    add_executable(run ${CUDA_SOURCES} "pinned_buffer.h")
+    add_executable(run ${CUDA_SOURCES} "pinned_buffer.h" "mapped_file.h")
 # ===== includes =====
     target_include_directories(run PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
