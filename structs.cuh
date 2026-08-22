@@ -50,9 +50,15 @@ const ftype dx=1.0;
 
 const ftype dt2=dt*dt;
 
-struct Data{
-  Tile tiles[Nx];
-};
+#ifdef _WIN32
+  struct Data {
+      Tile* tiles = nullptr;
+  };
+#else
+  struct Data{
+    Tile tiles[Nx];
+  };
+#endif
 
 template<int Ns> struct CellLine{
   ftype2 valflux[Ns][Nz];

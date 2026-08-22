@@ -32,7 +32,8 @@ template<typename farshType> void calcConeFold(int it, std::vector<double>& timi
   size_t sh_size = Nz*2*sizeof(ftype);
   CHECK_ERROR(cudaFuncSetAttribute(compactTower<farshType,0>, cudaFuncAttributeMaxDynamicSharedMemorySize, sh_size));
   CHECK_ERROR(cudaFuncSetAttribute(compactTower<farshType,1>, cudaFuncAttributeMaxDynamicSharedMemorySize, sh_size));
-  cudaStream_t streams[parsHost.Ngpus];
+  CHECK_ERROR(cudaGetDeviceCount(&parsHost.Ngpus));
+  std::vector<cudaStream_t> streams(parsHost.Ngpus);
   Tile* buffer[8]={0};
   const size_t bufsize = sizeof(Tile)/parsHost.Ngpus;
   for(int i=0; i<parsHost.Ngpus; i++) {

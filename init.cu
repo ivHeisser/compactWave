@@ -1,11 +1,20 @@
 #include <iostream>
-/*
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-*/
+#include "params.hpp"
+
+#ifdef _WIN32
+    #include <io.h>
+    #include <fcntl.h>
+#else
+    #include <sys/mman.h>
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+
+    #define OPEN  open
+    #define LSEEK lseek
+#endif
+
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -72,7 +81,9 @@ int init(){
 	  if( ptrprop.type!=cudaMemoryTypeDevice && ptrprop.type!=cudaMemoryTypeManaged ) {
 		  fill<<<dim3(Ny/4,Nz/32), dim3(4,32)>>>(ix, buffer); cudaDeviceSynchronize(); CHECK_ERROR( cudaGetLastError() );
 		  CHECK_ERROR( cudaMemcpy(&parsHost.data->tiles[ix], buffer, sizeof(Tile), cudaMemcpyDefault));
+#ifndef _WIN32
 		  madvise(&parsHost.data->tiles[ix], sizeof(Tile), MADV_DONTNEED);
+#endif
 	  } else {
 		  fill<<<dim3(Ny/4,Nz/32), dim3(4,32)>>>(ix, &parsHost.data->tiles[ix]); cudaDeviceSynchronize(); CHECK_ERROR( cudaGetLastError() );
 	  }
@@ -117,14 +128,128 @@ __global__ void fill(const int ix, Tile* buffer){
       //if(crd.x==Nx/2 && crd.y==Ny/2 && crd.z==Nz/2) v.elem[icomp] =1; else v.elem[icomp] =0;
 	}
 }
-
+#ifndef _WIN32
 void alloc_mmaped(void** ptr, const size_t size) {
 	char swapfname[1024]; sprintf(swapfname, "tmp.swp");
-	int swp_file; swp_file = open(swapfname,O_RDWR|O_TRUNC|O_CREAT, 0666);
+	int swp_file = OPEN(swapfname, O_RDWR | O_TRUNC | O_CREAT, 0666);
 	if(swp_file==-1) throw std::runtime_error( "Error opening file "+std::string(swapfname) );
-	lseek(swp_file, size, SEEK_SET);
+	LSEEK(swp_file, size, SEEK_SET);
 	write(swp_file, "", 1); lseek(swp_file, 0, SEEK_SET);
 	*ptr = (void*)mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED, swp_file,0);
 	if(*ptr == MAP_FAILED) throw std::runtime_error("Error mmap data");
 	close(swp_file);
 }	
+#endif
+/*
+#ifdef _WIN32
+
+#include <windows.h>
+#include <stdexcept>
+#include <string>
+
+void alloc_mmaped(void** ptr, const size_t size)
+{
+    const char* swapfname = "tmp.swp";
+
+    HANDLE file = CreateFileA(
+        swapfname,
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+
+    if (file == INVALID_HANDLE_VALUE)
+        throw std::runtime_error("Error opening file " + std::string(swapfname));
+
+    LARGE_INTEGER fileSize;
+    fileSize.QuadPart = static_cast<LONGLONG>(size);
+
+    if (!SetFilePointerEx(file, fileSize, nullptr, FILE_BEGIN) ||
+        !SetEndOfFile(file))
+    {
+        CloseHandle(file);
+        throw std::runtime_error("Error resizing file");
+    }
+
+    HANDLE mapping = CreateFileMappingA(
+        file,
+        nullptr,
+        PAGE_READWRITE,
+        static_cast<DWORD>(size >> 32),
+        static_cast<DWORD>(size & 0xffffffff),
+        nullptr
+    );
+
+    if (!mapping)
+    {
+        CloseHandle(file);
+        throw std::runtime_error("Error creating file mapping");
+    }
+
+    *ptr = MapViewOfFile(
+        mapping,
+        FILE_MAP_READ | FILE_MAP_WRITE,
+        0,
+        0,
+        size
+    );
+
+    if (!*ptr)
+    {
+        CloseHandle(mapping);
+        CloseHandle(file);
+        throw std::runtime_error("Error mapping file");
+    }
+
+    CloseHandle(mapping);
+    CloseHandle(file);
+}
+
+#else
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <stdexcept>
+#include <string>
+
+void alloc_mmaped(void** ptr, const size_t size)
+{
+    char swapfname[1024];
+    sprintf(swapfname, "tmp.swp");
+
+    int swp_file = open(
+        swapfname,
+        O_RDWR | O_TRUNC | O_CREAT,
+        0666
+    );
+
+    if (swp_file == -1)
+        throw std::runtime_error(
+            "Error opening file " + std::string(swapfname)
+        );
+
+    lseek(swp_file, size, SEEK_SET);
+    write(swp_file, "", 1);
+    lseek(swp_file, 0, SEEK_SET);
+
+    *ptr = mmap(
+        0,
+        size,
+        PROT_READ | PROT_WRITE,
+        MAP_SHARED,
+        swp_file,
+        0
+    );
+
+    if (*ptr == MAP_FAILED)
+        throw std::runtime_error("Error mmap data");
+
+    close(swp_file);
+}
+
+#endif
+*/
