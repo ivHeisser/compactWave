@@ -38,9 +38,17 @@ void alloc_mmaped(void** ptr, const size_t size);
 
 int init(){
   parsHost.iStep=0;
-  Data data; allocateTiles(data); parsHost.data = &data;
-  printf("Data allocation %d x %d x %d (%.2f GB)\n", Nx, Ny, Nz, sizeof(Data)/1024./1024./1024.);
-  CHECK_ERROR( cudaMallocHost((void**)&parsHost.data, sizeof(Data)) );
+  Data data; allocateTiles(data); 
+  //printf("AFTER ALLOC: data=%p tiles=%p\n", (void*)&data, (void*)data.tiles);
+  parsHost.data = &data;
+  //printf("PARS: data=%p tiles=%p\n", (void*)parsHost.data, (void*)parsHost.data->tiles);
+  //printf("Data allocation %d x %d x %d (%.2f GB)\n", Nx, Ny, Nz, sizeof(Data)/1024./1024./1024.);
+  printf("sizeof(Tile) = %zu bytes\n", sizeof(Tile));
+  printf("sizeof(Data) = %zu bytes\n", sizeof(Data));
+  printf("tiles size   = %zu bytes\n", Nx * sizeof(Tile));
+  const size_t dataSize = Nx * sizeof(Tile);
+  printf("Data allocation %d x %d x %d (%zu bytes, %.2f GB)\n", Nx, Ny, Nz, dataSize, dataSize / (1024.0 * 1024.0 * 1024.0));
+  // deleted // CHECK_ERROR( cudaMallocHost((void**)&parsHost.data, sizeof(Data)) );
   //CHECK_ERROR( cudaMallocManaged((void**)&parsHost.data, sizeof(Data)) );
   //CHECK_ERROR( cudaMalloc((void**)&parsHost.data, sizeof(Data)) );
   //alloc_mmaped((void**)&parsHost.data, sizeof(Data));
@@ -61,9 +69,9 @@ int init(){
   throw std::runtime_error( "Incorrect GPUs number" );
   for(int igpu = 0; igpu<parsHost.Ngpus; igpu++) {
 	CHECK_ERROR(cudaSetDevice(igpu));
-    printf("Farsh Memory allocation : %.2f GB on every GPU\n", parsHost.farshsize/1024./1024./1024.);
+    printf("Memory allocation : %.2f GB on every GPU\n", parsHost.farshsize/1024./1024./1024.);
     CHECK_ERROR( cudaMalloc((void**)&(parsHost.farsh[igpu]), parsHost.farshsize) );
-    std::cout<< "Farsh memset..." << std::endl;
+    std::cout<< "Memset..." << std::endl;
     CHECK_ERROR( cudaMemset(parsHost.farsh[igpu], 0, parsHost.farshsize) );
     copy2dev( parsHost, pars );
   }
@@ -81,6 +89,7 @@ int init(){
 	  CHECK_ERROR( cudaPointerGetAttributes( &ptrprop, parsHost.data ));
 	  if( ptrprop.type!=cudaMemoryTypeDevice && ptrprop.type!=cudaMemoryTypeManaged ) {
 		  fill<<<dim3(Ny/4,Nz/32), dim3(4,32)>>>(ix, buffer); cudaDeviceSynchronize(); CHECK_ERROR( cudaGetLastError() );
+          // printf("ix=%d Nx=%d sizeof(Tile)=%zu tiles=%p buffer=%p\n", ix, Nx, sizeof(Tile), (void*)parsHost.data->tiles, (void*)buffer);
 		  CHECK_ERROR( cudaMemcpy(&parsHost.data->tiles[ix], buffer, sizeof(Tile), cudaMemcpyDefault));
 #ifndef _WIN32
 		  madvise(&parsHost.data->tiles[ix], sizeof(Tile), MADV_DONTNEED);
@@ -108,9 +117,9 @@ __global__ void fill(const int ix, Tile* buffer){
 	//v.elem[0] = exp(-rl*rl/5);
 	//if(rl<10) v.elem[0] = 2*M_PI;
 
-	const ftype m=1;
+	//const ftype m=1;
 	const ftype vel=0.1;
-	const ftype delta=0;
+	//const ftype delta=0;
 	const ftype gamma = -sqrt(1/(1-vel*vel));
 
 	const ftype3 r = make_ftype3(crd.x-Nx/2, crd.y-Ny/2, crd.z-Nz/2) ;

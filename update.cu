@@ -189,7 +189,7 @@ void compactTower(int ix, farshType* farshptr){
 }
 
 inline __device__ void compact_step(Cell c[4], ftype* vals_sh, const int sub_it){
-  const int it=pars.iStep*Nt+sub_it;
+  //const int it=pars.iStep*Nt+sub_it;
   const int iz=threadIdx.x;
   //const ftype flux02 = get_flux_Y( c[0].val, c[2].val, it );
   //const ftype flux01 = get_flux_X( c[0].val, c[1].val, it );

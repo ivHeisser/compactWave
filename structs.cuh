@@ -72,7 +72,7 @@ struct Farsh{
   static_assert(Ny%2==0);
   static const int NLOAD=1;
   static const int NSAVE=1;
-  static const int NFL = NT+1+NLOAD+NSAVE;
+  static const int NFL = NT + 1 + NLOAD + NSAVE;
 };
 
 template<const int _NFY> struct FarshLines: public Farsh {
@@ -91,22 +91,15 @@ struct Params{
   size_t farshsize;
   int Ngpus;
   int iStep;
-  static const int Nt=NT;
+  static const int Nt = NT;
 } parsHost;
 
 
 #ifdef _WIN32
   #include <windows.h>
-  void allocateTiles(Data& data){
-      data.tiles = static_cast<Tile*>(
-          VirtualAlloc(
-              nullptr,
-              Nx * sizeof(Tile),
-              MEM_RESERVE | MEM_COMMIT,
-              PAGE_READWRITE
-          )
-      );
 
+  void allocateTiles(Data& data){
+      data.tiles = static_cast<Tile*>( VirtualAlloc(nullptr,  Nx * sizeof(Tile),  MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE ));
       if (!data.tiles) {
           throw std::runtime_error("VirtualAlloc failed");
       }

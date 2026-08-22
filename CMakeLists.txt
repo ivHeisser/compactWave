@@ -1,3 +1,5 @@
+nvcc run.cu -DNGSIZE=128 -DNT=8 -std=c++17 -arch=sm_86 -Xcompiler=/Zc:preprocessor
+
 cmake_minimum_required(VERSION 3.24)
 
 project(CUDA_Project LANGUAGES CUDA CXX)
