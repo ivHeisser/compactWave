@@ -1,9 +1,32 @@
 #include <vector>
 #include <thrust/swap.h>
 
+#ifdef _WIN32
+	#include <windows.h>
+#else
+	#include <sys/mman.h>
+#endif
+
+#include <stdexcept>
+#include <cstddef>
+#include "structs.cuh"
+
 #define PRINT_VAL(val) << ", " #val "= " << val
 
 const int DEBUG=0;
+
+inline void my_madvise(void* ptr, size_t size)
+{
+#ifdef _WIN32
+    if (!VirtualAlloc(ptr, size, MEM_RESET, PAGE_READWRITE)) {
+        throw std::runtime_error("VirtualAlloc(MEM_RESET) failed");
+    }
+#else
+    if (madvise(ptr, size, MADV_DONTNEED) != 0) {
+        throw std::runtime_error("madvise(MADV_DONTNEED) failed");
+    }
+#endif
+}
 
 #define SET_BC_VAL
 //#define SET_BC_FLUX
@@ -15,11 +38,6 @@ template<typename farshType>  __global__ __launch_bounds__(Nz) void copy_farsh2m
 template<typename Ftype> inline __device__ Ftype get_flux_X(const Ftype valM, const Ftype valP, const int it);
 template<typename Ftype> inline __device__ Ftype get_flux_Y(const Ftype valM, const Ftype valP, const int it);
 template<typename Ftype> inline __device__ Ftype get_flux_Z(const Ftype valM, const Ftype valP, const int it);
-
-const ftype CFL=dt*dt/dx*dx;
-const ftype VelX=1.0;//0.9;//0.9;//0.9;
-const ftype VelY=0.1;//-0.08;//-0.8;
-const ftype VelZ=0.2;//-0.07;//-0.7;
 
 inline __host__ __device__ bool isOutX(const int x) { return (x<0 || x>=Nx); }
 
@@ -101,7 +119,7 @@ template<typename farshType> void calcConeFold(int it, std::vector<double>& timi
 	}
 
 	cudaDeviceSynchronize(); CHECK_ERROR( cudaGetLastError() );
-	if( ix+Nt+1>=0 && ix+Nt+1<Nx ) madvise(&parsHost.data->tiles[ix+Nt+1], sizeof(Tile), MADV_DONTNEED);
+	if( ix+Nt+1>=0 && ix+Nt+1<Nx ) my_madvise(&parsHost.data->tiles[ix+Nt+1], sizeof(Tile));//, MADV_DONTNEED);
   }
   for(int i=0;i<parsHost.Ngpus;i++) {
 	CHECK_ERROR( cudaSetDevice(i) );
@@ -114,22 +132,25 @@ template<typename farshType> void calcConeFold(int it, std::vector<double>& timi
 
 inline __device__ void compact_step(Cell c[4], ftype* vals_sh, const int sub_it);
  
-template<typename farshType>  __global__ __launch_bounds__(Nz) void copy_mem2farsh(const int fix, farshType* farsh_ptr, const Tile* buffer, const int iyshift){
+template<typename farshType>  __global__ __launch_bounds__(Nz) 
+void copy_mem2farsh(const int fix, farshType* farsh_ptr, const Tile* buffer, const int iyshift){
 	const int iy=blockIdx.x;
 	const int iz=threadIdx.x;
 	farsh_ptr->cls[(iy+iyshift)%farshType::NFY].valflux[ fix ][iz] = buffer->val[iy][iz].elem2;
 }
-template<typename farshType>  __global__ __launch_bounds__(Nz) void copy_farsh2mem(const int fix, const farshType* farsh_ptr, Tile* buffer, const int iyshift){
+template<typename farshType>  __global__ __launch_bounds__(Nz) 
+void copy_farsh2mem(const int fix, const farshType* farsh_ptr, Tile* buffer, const int iyshift){
 	const int iy=blockIdx.x;
 	const int iz=threadIdx.x;
 	int igpu; cudaGetDevice(&igpu);
 	buffer->val[iy][iz].elem2 = farsh_ptr->cls[(iy+iyshift)%farshType::NFY].valflux[ fix ][iz];
 }
-template<typename farshType, const int parity>  __global__ __launch_bounds__(Nz) void compactTower(int ix, farshType* farshptr){
+template<typename farshType, const int parity>  __global__ __launch_bounds__(Nz) 
+void compactTower(int ix, farshType* farshptr){
   const int iz = threadIdx.x;
   const int iy = (blockIdx.x*2+parity)%farshType::NFY;
   const int iyP = (iy+1)%farshType::NFY;
-  extern __shared__ ftype vals_sh[2*Nz];
+  extern __shared__ ftype vals_sh[];//2*Nz];
   register union {
 	  Cell c[4] = {0};
 	  ftype2 vrhs[4];

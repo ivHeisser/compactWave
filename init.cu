@@ -1,5 +1,6 @@
 #include <iostream>
 #include "params.hpp"
+#include "structs.cuh"
 
 #ifdef _WIN32
     #include <io.h>
@@ -30,7 +31,6 @@ std::vector<char> readFile(const fs::path& path) {
 	file.read(buffer.data(), size);
 	return buffer;
 }
-#include "structs.cuh"
 
 __global__ void fill(const int ix, Tile* buf);
 
@@ -38,6 +38,7 @@ void alloc_mmaped(void** ptr, const size_t size);
 
 int init(){
   parsHost.iStep=0;
+  Data data; allocateTiles(data); parsHost.data = &data;
   printf("Data allocation %d x %d x %d (%.2f GB)\n", Nx, Ny, Nz, sizeof(Data)/1024./1024./1024.);
   CHECK_ERROR( cudaMallocHost((void**)&parsHost.data, sizeof(Data)) );
   //CHECK_ERROR( cudaMallocManaged((void**)&parsHost.data, sizeof(Data)) );
