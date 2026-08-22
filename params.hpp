@@ -51,6 +51,8 @@ template<typename T> __host__ __device__ float fptype2ftype(const T& f) { return
 #endif
 
 
+const uint64_t M_PI=3.14159;
+
 #ifndef CHECK_ERROR_H
 #define CHECK_ERROR_H
 #define PRINT_LAST_ERROR() PrintLastError(__FILE__,__LINE__)
@@ -63,7 +65,7 @@ void deviceDiagnostics();
 #endif//CHECK_ERROR_H
 #include <cuda.h>
 #include <stdio.h>
-#include "err.h"
+
 namespace errors{
 __managed__ cudaError_t last_err=cudaSuccess;
 };

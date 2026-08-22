@@ -1,11 +1,21 @@
 #include <iostream>
-/*
-#include <sys/mman.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-*/
+#include "params.hpp"
+#include "structs.cuh"
+
+#ifdef _WIN32
+    #include <io.h>
+    #include <fcntl.h>
+#else
+    #include <sys/mman.h>
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+    #include <unistd.h>
+
+    #define OPEN  open
+    #define LSEEK lseek
+#endif
+
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -21,7 +31,6 @@ std::vector<char> readFile(const fs::path& path) {
 	file.read(buffer.data(), size);
 	return buffer;
 }
-#include "structs.cuh"
 
 __global__ void fill(const int ix, Tile* buf);
 
@@ -29,8 +38,17 @@ void alloc_mmaped(void** ptr, const size_t size);
 
 int init(){
   parsHost.iStep=0;
-  printf("Data allocation %d x %d x %d (%.2f GB)\n", Nx, Ny, Nz, sizeof(Data)/1024./1024./1024.);
-  CHECK_ERROR( cudaMallocHost((void**)&parsHost.data, sizeof(Data)) );
+  Data data; allocateTiles(data); 
+  //printf("AFTER ALLOC: data=%p tiles=%p\n", (void*)&data, (void*)data.tiles);
+  parsHost.data = &data;
+  //printf("PARS: data=%p tiles=%p\n", (void*)parsHost.data, (void*)parsHost.data->tiles);
+  //printf("Data allocation %d x %d x %d (%.2f GB)\n", Nx, Ny, Nz, sizeof(Data)/1024./1024./1024.);
+  printf("sizeof(Tile) = %zu bytes\n", sizeof(Tile));
+  printf("sizeof(Data) = %zu bytes\n", sizeof(Data));
+  printf("tiles size   = %zu bytes\n", Nx * sizeof(Tile));
+  const size_t dataSize = Nx * sizeof(Tile);
+  printf("Data allocation %d x %d x %d (%zu bytes, %.2f GB)\n", Nx, Ny, Nz, dataSize, dataSize / (1024.0 * 1024.0 * 1024.0));
+  // deleted // CHECK_ERROR( cudaMallocHost((void**)&parsHost.data, sizeof(Data)) );
   //CHECK_ERROR( cudaMallocManaged((void**)&parsHost.data, sizeof(Data)) );
   //CHECK_ERROR( cudaMalloc((void**)&parsHost.data, sizeof(Data)) );
   //alloc_mmaped((void**)&parsHost.data, sizeof(Data));
@@ -51,9 +69,9 @@ int init(){
   throw std::runtime_error( "Incorrect GPUs number" );
   for(int igpu = 0; igpu<parsHost.Ngpus; igpu++) {
 	CHECK_ERROR(cudaSetDevice(igpu));
-    printf("Farsh Memory allocation : %.2f GB on every GPU\n", parsHost.farshsize/1024./1024./1024.);
+    printf("Memory allocation : %.2f GB on every GPU\n", parsHost.farshsize/1024./1024./1024.);
     CHECK_ERROR( cudaMalloc((void**)&(parsHost.farsh[igpu]), parsHost.farshsize) );
-    std::cout<< "Farsh memset..." << std::endl;
+    std::cout<< "Memset..." << std::endl;
     CHECK_ERROR( cudaMemset(parsHost.farsh[igpu], 0, parsHost.farshsize) );
     copy2dev( parsHost, pars );
   }
@@ -71,8 +89,11 @@ int init(){
 	  CHECK_ERROR( cudaPointerGetAttributes( &ptrprop, parsHost.data ));
 	  if( ptrprop.type!=cudaMemoryTypeDevice && ptrprop.type!=cudaMemoryTypeManaged ) {
 		  fill<<<dim3(Ny/4,Nz/32), dim3(4,32)>>>(ix, buffer); cudaDeviceSynchronize(); CHECK_ERROR( cudaGetLastError() );
+          // printf("ix=%d Nx=%d sizeof(Tile)=%zu tiles=%p buffer=%p\n", ix, Nx, sizeof(Tile), (void*)parsHost.data->tiles, (void*)buffer);
 		  CHECK_ERROR( cudaMemcpy(&parsHost.data->tiles[ix], buffer, sizeof(Tile), cudaMemcpyDefault));
+#ifndef _WIN32
 		  madvise(&parsHost.data->tiles[ix], sizeof(Tile), MADV_DONTNEED);
+#endif
 	  } else {
 		  fill<<<dim3(Ny/4,Nz/32), dim3(4,32)>>>(ix, &parsHost.data->tiles[ix]); cudaDeviceSynchronize(); CHECK_ERROR( cudaGetLastError() );
 	  }
@@ -96,9 +117,9 @@ __global__ void fill(const int ix, Tile* buffer){
 	//v.elem[0] = exp(-rl*rl/5);
 	//if(rl<10) v.elem[0] = 2*M_PI;
 
-	const ftype m=1;
+	//const ftype m=1;
 	const ftype vel=0.1;
-	const ftype delta=0;
+	//const ftype delta=0;
 	const ftype gamma = -sqrt(1/(1-vel*vel));
 
 	const ftype3 r = make_ftype3(crd.x-Nx/2, crd.y-Ny/2, crd.z-Nz/2) ;
@@ -117,14 +138,128 @@ __global__ void fill(const int ix, Tile* buffer){
       //if(crd.x==Nx/2 && crd.y==Ny/2 && crd.z==Nz/2) v.elem[icomp] =1; else v.elem[icomp] =0;
 	}
 }
-
+#ifndef _WIN32
 void alloc_mmaped(void** ptr, const size_t size) {
 	char swapfname[1024]; sprintf(swapfname, "tmp.swp");
-	int swp_file; swp_file = open(swapfname,O_RDWR|O_TRUNC|O_CREAT, 0666);
+	int swp_file = OPEN(swapfname, O_RDWR | O_TRUNC | O_CREAT, 0666);
 	if(swp_file==-1) throw std::runtime_error( "Error opening file "+std::string(swapfname) );
-	lseek(swp_file, size, SEEK_SET);
+	LSEEK(swp_file, size, SEEK_SET);
 	write(swp_file, "", 1); lseek(swp_file, 0, SEEK_SET);
 	*ptr = (void*)mmap(0, size, PROT_READ|PROT_WRITE, MAP_SHARED, swp_file,0);
 	if(*ptr == MAP_FAILED) throw std::runtime_error("Error mmap data");
 	close(swp_file);
 }	
+#endif
+/*
+#ifdef _WIN32
+
+#include <windows.h>
+#include <stdexcept>
+#include <string>
+
+void alloc_mmaped(void** ptr, const size_t size)
+{
+    const char* swapfname = "tmp.swp";
+
+    HANDLE file = CreateFileA(
+        swapfname,
+        GENERIC_READ | GENERIC_WRITE,
+        0,
+        nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+
+    if (file == INVALID_HANDLE_VALUE)
+        throw std::runtime_error("Error opening file " + std::string(swapfname));
+
+    LARGE_INTEGER fileSize;
+    fileSize.QuadPart = static_cast<LONGLONG>(size);
+
+    if (!SetFilePointerEx(file, fileSize, nullptr, FILE_BEGIN) ||
+        !SetEndOfFile(file))
+    {
+        CloseHandle(file);
+        throw std::runtime_error("Error resizing file");
+    }
+
+    HANDLE mapping = CreateFileMappingA(
+        file,
+        nullptr,
+        PAGE_READWRITE,
+        static_cast<DWORD>(size >> 32),
+        static_cast<DWORD>(size & 0xffffffff),
+        nullptr
+    );
+
+    if (!mapping)
+    {
+        CloseHandle(file);
+        throw std::runtime_error("Error creating file mapping");
+    }
+
+    *ptr = MapViewOfFile(
+        mapping,
+        FILE_MAP_READ | FILE_MAP_WRITE,
+        0,
+        0,
+        size
+    );
+
+    if (!*ptr)
+    {
+        CloseHandle(mapping);
+        CloseHandle(file);
+        throw std::runtime_error("Error mapping file");
+    }
+
+    CloseHandle(mapping);
+    CloseHandle(file);
+}
+
+#else
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <stdexcept>
+#include <string>
+
+void alloc_mmaped(void** ptr, const size_t size)
+{
+    char swapfname[1024];
+    sprintf(swapfname, "tmp.swp");
+
+    int swp_file = open(
+        swapfname,
+        O_RDWR | O_TRUNC | O_CREAT,
+        0666
+    );
+
+    if (swp_file == -1)
+        throw std::runtime_error(
+            "Error opening file " + std::string(swapfname)
+        );
+
+    lseek(swp_file, size, SEEK_SET);
+    write(swp_file, "", 1);
+    lseek(swp_file, 0, SEEK_SET);
+
+    *ptr = mmap(
+        0,
+        size,
+        PROT_READ | PROT_WRITE,
+        MAP_SHARED,
+        swp_file,
+        0
+    );
+
+    if (*ptr == MAP_FAILED)
+        throw std::runtime_error("Error mmap data");
+
+    close(swp_file);
+}
+
+#endif
+*/
